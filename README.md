@@ -5,11 +5,13 @@ A sophisticated system for identifying and executing arbitrage opportunities acr
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Python 3.8+
 - Docker and Docker Compose
 - Git
 
 ### 1. Clone and Setup
+
 ```bash
 git clone <your-repo-url>
 cd prediction-arb
@@ -23,6 +25,7 @@ pip install -r requirements.txt
 ```
 
 ### 2. Start Database Services
+
 ```bash
 # Start PostgreSQL and Redis
 docker-compose up -d
@@ -32,12 +35,14 @@ docker-compose ps
 ```
 
 ### 3. Initialize Database
+
 ```bash
 # Create tables and seed initial data
 python scripts/init_db.py
 ```
 
 ### 4. Run the Application
+
 ```bash
 # Start the FastAPI server
 python -m app.main
@@ -47,6 +52,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 5. Access the API
+
 - API Documentation: http://localhost:8000/docs
 - Health Check: http://localhost:8000/health
 - Root Endpoint: http://localhost:8000/
@@ -86,6 +92,7 @@ The system uses PostgreSQL with the following core tables:
 ## 🔧 Development
 
 ### Database Migrations
+
 ```bash
 # Create a new migration
 alembic revision --autogenerate -m "Description of changes"
@@ -98,6 +105,7 @@ alembic downgrade -1
 ```
 
 ### Testing
+
 ```bash
 # Run tests
 pytest
@@ -107,6 +115,7 @@ pytest --cov=app
 ```
 
 ### Code Formatting
+
 ```bash
 # Format code
 black app/
@@ -125,6 +134,7 @@ flake8 app/
 ## 🔐 Authentication
 
 The system uses JWT-based authentication with role-based access control:
+
 - **viewer**: Read-only access to market data
 - **trader**: Can place orders and manage positions
 - **admin**: Full system access
@@ -139,29 +149,15 @@ The system uses JWT-based authentication with role-based access control:
 ## 🚀 Deployment
 
 ### Local Development
+
 - PostgreSQL 15 via Docker
 - Redis 7 via Docker
 - FastAPI with hot reload
 
 ### Production Considerations
+
 - Use environment variables for sensitive data
 - Configure proper CORS settings
 - Set up SSL/TLS termination
 - Implement rate limiting
 - Use production-grade database and Redis instances
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
-## 📝 License
-
-[Add your license here]
-
-## 🆘 Support
-
-For questions or issues, please open a GitHub issue or contact the development team.

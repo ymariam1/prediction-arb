@@ -23,8 +23,8 @@ class BaseVenueReader(ABC):
         self.venue = self._get_venue()
         self.logger = logging.getLogger(f"{self.__class__.__name__}")
         
-        # Configuration for 7-day resolution filter
-        self.max_resolution_days = 7
+
+        self.max_resolution_days = 28
         
     def _get_venue(self) -> Venue:
         """Get or create the venue record."""
@@ -233,8 +233,11 @@ class BaseVenueReader(ABC):
         # 2. Handle trade updates/cancellations
         # 3. Store trade details in a separate trades table
         
-        # For now, we'll just log the trades
-        self.logger.info(f"Received {len(trades)} trades for market {market_id}")
+        # For now, we'll just log the trades (only if there are trades to avoid noise)
+        if trades:
+            self.logger.info(f"Received {len(trades)} trades for market {market_id}")
+        else:
+            self.logger.debug(f"Received {len(trades)} trades for market {market_id}")
         
         # TODO: Implement trade persistence when trades table is available
         pass

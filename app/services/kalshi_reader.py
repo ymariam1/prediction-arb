@@ -51,6 +51,9 @@ class KalshiReader(BaseVenueReader):
                     async with session.get(url, headers=headers, **kwargs) as response:
                         if response.status == 200:
                             return await response.json()
+                        elif response.status == 404:
+                            # Handle 404s gracefully - some endpoints may not be available
+                            return None
                         else:
                             self.logger.error(f"Kalshi API error: {response.status} - {await response.text()}")
                             return {}
@@ -58,6 +61,9 @@ class KalshiReader(BaseVenueReader):
                     async with session.post(url, headers=headers, **kwargs) as response:
                         if response.status == 200:
                             return await response.json()
+                        elif response.status == 404:
+                            # Handle 404s gracefully - some endpoints may not be available
+                            return None
                         else:
                             self.logger.error(f"Kalshi API error: {response.status} - {await response.text()}")
                             return {}
@@ -155,8 +161,13 @@ class KalshiReader(BaseVenueReader):
         try:
             response = await self._make_request(f"/markets/{market_id}/trades")
             
-            if not response or 'trades' not in response:
-                self.logger.warning(f"No trades data received for market {market_id}")
+            # Handle case where trades endpoint returns 404 or empty response
+            if not response:
+                self.logger.debug(f"Trades endpoint not available for market {market_id}")
+                return []
+            
+            if 'trades' not in response:
+                self.logger.debug(f"No trades data in response for market {market_id}")
                 return []
             
             trades = []
@@ -177,6 +188,10 @@ class KalshiReader(BaseVenueReader):
             return trades
             
         except Exception as e:
+            # Handle 404 errors gracefully - trades endpoint may not be available
+            if "404" in str(e):
+                self.logger.debug(f"Trades endpoint not available for market {market_id}")
+                return []
             self.logger.error(f"Error fetching trades for market {market_id}: {e}")
             return []
     

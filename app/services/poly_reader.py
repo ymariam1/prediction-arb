@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.services.base_reader import BaseVenueReader
 from app.config import settings
+from app.models.rules_text import RulesText
 
 
 class PolyReader(BaseVenueReader):
@@ -99,26 +100,26 @@ class PolyReader(BaseVenueReader):
             # Get all markets
             response = await self._make_request("/markets")
             
-            if not response or 'markets' not in response:
+            if not response or 'data' not in response:
                 self.logger.warning("No markets data received from Polymarket")
                 return []
             
             markets = []
-            for market in response['markets']:
+            for market in response['data']:
                 # Extract relevant market information
                 market_data = {
-                    'id': market.get('id'),
+                    'id': market.get('condition_id'),  # Use condition_id as the market ID
                     'title': market.get('question', ''),
                     'rules_text': market.get('description', ''),
-                    'resolution_date': market.get('expiration_date'),
-                    'status': market.get('status', 'active'),
+                    'resolution_date': market.get('end_date_iso'),
+                    'status': 'active' if market.get('active', False) and not market.get('closed', False) else 'closed',
                     'version': '1.0',
-                    'category': market.get('category'),
-                    'subcategory': market.get('subcategory'),
-                    'last_price': market.get('last_price'),
-                    'volume': market.get('volume_24h'),
-                    'open_interest': market.get('open_interest'),
-                    'outcomes': market.get('outcomes', [])
+                    'category': None,  # Not available in current API
+                    'subcategory': None,  # Not available in current API
+                    'last_price': None,  # Not available in current API
+                    'volume': None,  # Not available in current API
+                    'open_interest': None,  # Not available in current API
+                    'outcomes': market.get('tokens', [])
                 }
                 
                 # Only include markets with valid IDs
@@ -135,6 +136,8 @@ class PolyReader(BaseVenueReader):
     async def fetch_order_book(self, market_id: str) -> Dict[str, Any]:
         """Fetch order book for a specific Polymarket market."""
         try:
+            # Note: Order book endpoints may not be available for all markets
+            # or may require different authentication/endpoints
             response = await self._make_request(f"/markets/{market_id}/orderbook")
             
             if not response:
@@ -171,12 +174,14 @@ class PolyReader(BaseVenueReader):
             return order_book
             
         except Exception as e:
-            self.logger.error(f"Error fetching order book for market {market_id}: {e}")
+            self.logger.warning(f"Order book not available for market {market_id}: {e}")
             return {'buys': [], 'sells': []}
     
     async def fetch_trades(self, market_id: str) -> List[Dict[str, Any]]:
         """Fetch recent trades for a specific Polymarket market."""
         try:
+            # Note: Trades endpoints may not be available for all markets
+            # or may require different authentication/endpoints
             response = await self._make_request(f"/markets/{market_id}/trades")
             
             if not response or 'trades' not in response:
@@ -202,7 +207,7 @@ class PolyReader(BaseVenueReader):
             return trades
             
         except Exception as e:
-            self.logger.error(f"Error fetching trades for market {market_id}: {e}")
+            self.logger.warning(f"Trades not available for market {market_id}: {e}")
             return []
     
     async def fetch_market_details(self, market_id: str) -> Dict[str, Any]:
