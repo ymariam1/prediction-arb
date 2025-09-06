@@ -5,6 +5,7 @@ from app.database import create_tables
 
 # Import API routers
 from app.api.ingestion import router as ingestion_router
+from app.api.arbitrage import router as arbitrage_router
 
 # Create FastAPI app
 app = FastAPI(
@@ -24,6 +25,7 @@ app.add_middleware(
 
 # Include API routers
 app.include_router(ingestion_router)
+app.include_router(arbitrage_router)
 
 @app.on_event("startup")
 async def startup_event():
@@ -39,7 +41,8 @@ async def root():
         "endpoints": {
             "health": "/health",
             "docs": "/docs",
-            "ingestion": "/api/v1/ingestion"
+            "ingestion": "/api/v1/ingestion",
+            "arbitrage": "/api/v1/arbitrage"
         }
     }
 

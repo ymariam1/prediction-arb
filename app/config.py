@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     polymarket_api_secret: Optional[str] = None
     polymarket_api_passphrase: Optional[str] = None
     
+    # LLM Services
+    openai_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+    llm_provider: str = "openai"  # openai, anthropic
+    llm_model: str = "o3-mini"  # o3-mini, o3, gpt-4, gpt-3.5-turbo, claude-3-haiku, qwen-turbo, kimi-chat, etc.
+    llm_temperature: float = 0.1  # Low temperature for consistent results
+    llm_max_tokens: int = 4000  # Increased for O3 chain-of-thought reasoning
+    
     # Development
     debug: Optional[str] = None
     log_level: Optional[str] = None

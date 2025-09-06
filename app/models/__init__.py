@@ -10,6 +10,7 @@ from .positions import Positions
 from .settlements import Settlements
 from .audit_log import AuditLog
 from .users import User
+from .arbitrage_signals import ArbitrageSignals
 
 __all__ = [
     "Base",
@@ -23,5 +24,6 @@ __all__ = [
     "Positions",
     "Settlements",
     "AuditLog",
-    "User"
+    "User",
+    "ArbitrageSignals"
 ]
