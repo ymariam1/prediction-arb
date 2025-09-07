@@ -91,6 +91,44 @@ async def ingest_data(
         raise HTTPException(status_code=500, detail=f"Data ingestion failed: {str(e)}")
 
 
+@router.post("/start-onchain-listeners")
+async def start_onchain_listeners(
+    venue_names: Optional[List[str]] = None,
+    background_tasks: BackgroundTasks = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Start on-chain event listeners for specified venues.
+    
+    This endpoint will:
+    1. Connect to blockchain networks
+    2. Listen for real-time events (trades, new markets, resolutions)
+    3. Update database with real-time data
+    4. Optionally run in background if specified
+    """
+    try:
+        manager = create_ingestion_manager(db)
+        
+        if background_tasks:
+            # Run in background
+            background_tasks.add_task(manager.start_onchain_listeners, venue_names)
+            return {
+                "message": "On-chain listeners started in background",
+                "venues": venue_names or ["polymarket"]
+            }
+        else:
+            # Run synchronously (this will block)
+            await manager.start_onchain_listeners(venue_names)
+            return {
+                "message": "On-chain listeners completed",
+                "venues": venue_names or ["polymarket"]
+            }
+            
+    except Exception as e:
+        logger.error(f"Error starting on-chain listeners: {e}")
+        raise HTTPException(status_code=500, detail=f"On-chain listeners failed: {str(e)}")
+
+
 @router.post("/start-continuous")
 async def start_continuous_ingestion(
     venue_names: Optional[List[str]] = None,

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.kalshi_reader import KalshiReader
 from app.services.poly_reader import PolyReader
+from app.services.poly_onchain_reader import PolyOnChainReader
 from app.models.venue import Venue
 
 
@@ -38,8 +39,10 @@ class DataIngestionManager:
                     self.readers["kalshi"] = KalshiReader(self.db)
                     self.logger.info("Initialized Kalshi reader")
                 elif venue.name.lower() == "polymarket":
+                    # Initialize both REST API and on-chain readers for Polymarket
                     self.readers["polymarket"] = PolyReader(self.db)
-                    self.logger.info("Initialized Polymarket reader")
+                    self.readers["polymarket_onchain"] = PolyOnChainReader(self.db)
+                    self.logger.info("Initialized Polymarket REST API and on-chain readers")
                 else:
                     self.logger.warning(f"Unknown venue type: {venue.name}")
                     
@@ -113,6 +116,28 @@ class DataIngestionManager:
                 }
         
         return results
+    
+    async def start_onchain_listeners(self, venue_names: Optional[List[str]] = None):
+        """Start on-chain event listeners for specified venues."""
+        if venue_names is None:
+            venue_names = list(self.readers.keys())
+        
+        onchain_readers = []
+        
+        for venue_name in venue_names:
+            if venue_name in self.readers:
+                reader = self.readers[venue_name]
+                # Check if this is an on-chain reader
+                if hasattr(reader, 'listen_for_events'):
+                    onchain_readers.append(reader)
+                    self.logger.info(f"Starting on-chain listener for {venue_name}")
+        
+        if onchain_readers:
+            # Run all on-chain listeners concurrently
+            tasks = [reader.listen_for_events() for reader in onchain_readers]
+            await asyncio.gather(*tasks, return_exceptions=True)
+        else:
+            self.logger.info("No on-chain readers found to start")
     
     async def run_continuous_ingestion(self, venue_names: Optional[List[str]] = None):
         """Run continuous data ingestion for specified venues."""

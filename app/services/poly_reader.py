@@ -26,7 +26,9 @@ class PolyReader(BaseVenueReader):
         self.api_key = settings.polymarket_api_key
         self.api_secret = settings.polymarket_api_secret
         self.api_passphrase = settings.polymarket_api_passphrase
-        self.base_url = "https://clob.polymarket.com"
+        # Use the main Polymarket API for markets, CLOB API for order books
+        self.api_base_url = "https://clob.polymarket.com"
+        self.clob_base_url = "https://clob.polymarket.com"
         
         if not all([self.api_key, self.api_secret, self.api_passphrase]):
             self.logger.warning("Polymarket API credentials not fully configured")
@@ -48,9 +50,10 @@ class PolyReader(BaseVenueReader):
         
         return signature
     
-    async def _make_request(self, endpoint: str, method: str = "GET", **kwargs) -> Dict[str, Any]:
+    async def _make_request(self, endpoint: str, method: str = "GET", use_clob: bool = False, **kwargs) -> Dict[str, Any]:
         """Make authenticated request to Polymarket API."""
-        url = f"{self.base_url}{endpoint}"
+        base_url = self.clob_base_url if use_clob else self.api_base_url
+        url = f"{base_url}{endpoint}"
         
         headers = {
             "Content-Type": "application/json",
@@ -97,8 +100,8 @@ class PolyReader(BaseVenueReader):
     async def fetch_markets(self) -> List[Dict[str, Any]]:
         """Fetch available markets from Polymarket."""
         try:
-            # Get all markets
-            response = await self._make_request("/markets")
+            # Get active markets using the main API
+            response = await self._make_request("/markets?active=true")
             
             if not response or 'data' not in response:
                 self.logger.warning("No markets data received from Polymarket")
@@ -107,12 +110,23 @@ class PolyReader(BaseVenueReader):
             markets = []
             for market in response['data']:
                 # Extract relevant market information
+                # Determine market status based on active and closed flags
+                is_active = market.get('active', False)
+                is_closed = market.get('closed', False)
+                
+                if is_closed:
+                    status = 'closed'
+                elif is_active:
+                    status = 'active'
+                else:
+                    status = 'inactive'
+                
                 market_data = {
                     'id': market.get('condition_id'),  # Use condition_id as the market ID
                     'title': market.get('question', ''),
                     'rules_text': market.get('description', ''),
                     'resolution_date': market.get('end_date_iso'),
-                    'status': 'active' if market.get('active', False) and not market.get('closed', False) else 'closed',
+                    'status': status,
                     'version': '1.0',
                     'category': None,  # Not available in current API
                     'subcategory': None,  # Not available in current API
@@ -136,15 +150,62 @@ class PolyReader(BaseVenueReader):
     async def fetch_order_book(self, market_id: str) -> Dict[str, Any]:
         """Fetch order book for a specific Polymarket market."""
         try:
-            # Note: Order book endpoints may not be available for all markets
-            # or may require different authentication/endpoints
-            response = await self._make_request(f"/markets/{market_id}/orderbook")
-            
-            if not response:
-                self.logger.warning(f"No order book data received for market {market_id}")
+            # First, get the market details to find token IDs
+            market_details = await self.fetch_market_details(market_id)
+            if not market_details or 'outcomes' not in market_details:
+                self.logger.warning(f"No market details or outcomes found for market {market_id}")
                 return {'buys': [], 'sells': []}
             
-            # Extract order book data
+            # Combine order books from all outcomes (tokens) in the market
+            combined_order_book = {
+                'buys': [],
+                'sells': []
+            }
+            
+            for outcome in market_details['outcomes']:
+                token_id = outcome.get('token_id')
+                if not token_id:
+                    continue
+                
+                # Fetch order book for this specific token
+                token_order_book = await self._fetch_token_order_book(token_id)
+                
+                # Add outcome information to each order
+                for buy_order in token_order_book.get('buys', []):
+                    buy_order['outcome'] = outcome.get('outcome', '')
+                    buy_order['token_id'] = token_id
+                    combined_order_book['buys'].append(buy_order)
+                
+                for sell_order in token_order_book.get('sells', []):
+                    sell_order['outcome'] = outcome.get('outcome', '')
+                    sell_order['token_id'] = token_id
+                    combined_order_book['sells'].append(sell_order)
+            
+            # Sort by price (bids descending, asks ascending)
+            combined_order_book['buys'].sort(key=lambda x: x['price'], reverse=True)
+            combined_order_book['sells'].sort(key=lambda x: x['price'])
+            
+            total_bids = len(combined_order_book['buys'])
+            total_asks = len(combined_order_book['sells'])
+            self.logger.debug(f"Fetched order book for market {market_id}: {total_bids} bids, {total_asks} asks across {len(market_details['outcomes'])} outcomes")
+            
+            return combined_order_book
+            
+        except Exception as e:
+            self.logger.warning(f"Order book not available for market {market_id}: {e}")
+            return {'buys': [], 'sells': []}
+    
+    async def _fetch_token_order_book(self, token_id: str) -> Dict[str, Any]:
+        """Fetch order book for a specific token ID."""
+        try:
+            # Use the CLOB API for order books
+            response = await self._make_request(f"/book?token_id={token_id}", use_clob=True)
+            
+            if not response:
+                self.logger.debug(f"No order book data received for token {token_id}")
+                return {'buys': [], 'sells': []}
+            
+            # Extract order book data according to Polymarket API format
             order_book = {
                 'buys': [],
                 'sells': []
@@ -166,15 +227,10 @@ class PolyReader(BaseVenueReader):
                         'size': float(ask.get('size', 0))
                     })
             
-            # Sort by price (bids descending, asks ascending)
-            order_book['buys'].sort(key=lambda x: x['price'], reverse=True)
-            order_book['sells'].sort(key=lambda x: x['price'])
-            
-            self.logger.debug(f"Fetched order book for market {market_id}: {len(order_book['buys'])} bids, {len(order_book['sells'])} asks")
             return order_book
             
         except Exception as e:
-            self.logger.warning(f"Order book not available for market {market_id}: {e}")
+            self.logger.debug(f"Order book not available for token {token_id}: {e}")
             return {'buys': [], 'sells': []}
     
     async def fetch_trades(self, market_id: str) -> List[Dict[str, Any]]:
@@ -213,11 +269,21 @@ class PolyReader(BaseVenueReader):
     async def fetch_market_details(self, market_id: str) -> Dict[str, Any]:
         """Fetch detailed information for a specific market."""
         try:
+            # Use the main API for market details
             response = await self._make_request(f"/markets/{market_id}")
             
             if not response:
                 self.logger.warning(f"No market details received for market {market_id}")
                 return {}
+            
+            # Ensure the response has the expected structure
+            if 'outcomes' not in response:
+                # If outcomes are not in the response, try to construct them from tokens
+                if 'tokens' in response:
+                    response['outcomes'] = response['tokens']
+                else:
+                    self.logger.warning(f"No outcomes or tokens found in market details for {market_id}")
+                    return {}
             
             return response
             

@@ -279,42 +279,46 @@ class ArbitrageEngine:
         if not all([snapshot_a.best_bid, snapshot_a.best_ask, snapshot_b.best_bid, snapshot_b.best_ask]):
             return None
         
-        # Calculate straddle cost (buy one market, sell the other)
-        # Strategy 1: Buy A, Sell B
-        cost_buy_a_sell_b = snapshot_a.best_ask + snapshot_b.best_bid
+        # For prediction markets, we're looking for complementary positions
+        # If market A is "Yes" and market B is "No" for the same event, 
+        # we should be able to buy both for less than $1.00 total
         
-        # Strategy 2: Sell A, Buy B  
-        cost_sell_a_buy_b = snapshot_a.best_bid + snapshot_b.best_ask
+        # Strategy 1: Buy A (Yes), Buy B (No) - should cost < $1.00
+        cost_buy_a_buy_b = snapshot_a.best_ask + snapshot_b.best_ask
+        
+        # Strategy 2: Sell A (Yes), Sell B (No) - should receive > $1.00
+        # This would be: (1 - snapshot_a.best_bid) + (1 - snapshot_b.best_bid)
+        cost_sell_a_sell_b = (1.0 - snapshot_a.best_bid) + (1.0 - snapshot_b.best_bid)
         
         # Choose the better strategy
-        if cost_buy_a_sell_b < cost_sell_a_buy_b:
-            total_cost = cost_buy_a_sell_b
-            strategy = "buy_a_sell_b"
+        if cost_buy_a_buy_b < cost_sell_a_sell_b:
+            total_cost = cost_buy_a_buy_b
+            strategy = "buy_a_buy_b"
             direction_a = "buy"
-            direction_b = "sell"
-            executable_size = min(snapshot_a.ask_size or 0, snapshot_b.bid_size or 0)
-        else:
-            total_cost = cost_sell_a_buy_b
-            strategy = "sell_a_buy_b"
-            direction_a = "sell"
             direction_b = "buy"
-            executable_size = min(snapshot_a.bid_size or 0, snapshot_b.ask_size or 0)
+            executable_size = min(snapshot_a.ask_size or 0, snapshot_b.ask_size or 0)
+        else:
+            total_cost = cost_sell_a_sell_b
+            strategy = "sell_a_sell_b"
+            direction_a = "sell"
+            direction_b = "sell"
+            executable_size = min(snapshot_a.bid_size or 0, snapshot_b.bid_size or 0)
         
         # Check minimum executable size
         if executable_size < self.min_executable_size:
             return None
         
-        # Calculate fees
+        # Calculate fees as percentage of position size
         fees_a = self._calculate_fees(snapshot_a.venue_name, executable_size)
         fees_b = self._calculate_fees(snapshot_b.venue_name, executable_size)
         
-        # Calculate slippage buffer
+        # Calculate slippage buffer as percentage
         slippage_buffer = self._calculate_slippage_buffer(executable_size)
         
-        # Total cost including fees and slippage
-        total_cost_with_fees = total_cost + fees_a + fees_b + slippage_buffer
+        # Total cost including fees and slippage (as percentage of position)
+        total_cost_with_fees = total_cost + (fees_a + fees_b + slippage_buffer) / executable_size
         
-        # Calculate edge buffer
+        # Calculate edge buffer (profit margin)
         edge_buffer = 1.0 - total_cost_with_fees
         
         # Determine if it's an arbitrage opportunity
